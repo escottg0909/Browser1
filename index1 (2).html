@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>In-App Browser</title>
+<style>
+  :root{
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --border: #2a3441;
+    --accent: #4fd1c5;
+    --accent-dim: #2f7d76;
+    --text: #e6edf3;
+    --text-dim: #8b96a5;
+    --danger: #ff6b6b;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; height:100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  .browser{ display:flex; flex-direction:column; height:100vh; width:100%; background: var(--panel); }
+
+  /* Tabs */
+  .tabbar{ display:flex; align-items:flex-end; gap:4px; background: var(--bg); padding:8px 8px 0 8px; overflow-x:auto; }
+  .tab{ display:flex; align-items:center; gap:8px; max-width:200px; min-width:120px; background: var(--panel-2);
+    border:1px solid var(--border); border-bottom:none; border-radius:8px 8px 0 0; padding:7px 10px;
+    font-size:12.5px; color: var(--text-dim); cursor:pointer; white-space:nowrap; overflow:hidden; }
+  .tab.active{ background: var(--panel); color: var(--text); }
+  .tab .fav{ width:14px; height:14px; flex-shrink:0; border-radius:3px; background: var(--accent-dim); }
+  .tab .title{ overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .tab .close{ opacity:0.6; padding:2px 5px; border-radius:4px; flex-shrink:0; }
+  .tab .close:hover{ opacity:1; background:#ffffff22; }
+  .newtab-btn{ width:30px; height:30px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    color: var(--text-dim); cursor:pointer; border-radius:6px; font-size:18px; margin-bottom:2px; }
+  .newtab-btn:hover{ background: var(--panel-2); color: var(--text); }
+
+  /* Toolbar */
+  .toolbar{ display:flex; align-items:center; gap:8px; padding:8px 10px; background: var(--panel); border-bottom:1px solid var(--border); }
+  .nav-btn{ width:32px; height:32px; display:flex; align-items:center; justify-content:center; background: var(--panel-2);
+    border:1px solid var(--border); border-radius:8px; color: var(--text); cursor:pointer; font-size:15px; user-select:none; flex-shrink:0; }
+  .nav-btn:hover:not(.disabled){ background:#242c3a; border-color: var(--accent-dim); }
+  .nav-btn.disabled{ opacity:0.35; cursor:default; }
+  .addressbar{ flex:1; display:flex; align-items:center; gap:8px; background: var(--panel-2); border:1px solid var(--border);
+    border-radius:20px; padding:0 14px; height:36px; }
+  .addressbar:focus-within{ border-color: var(--accent); }
+  .lock{ color: var(--text-dim); font-size:13px; flex-shrink:0; }
+  #urlInput{ flex:1; background:transparent; border:none; outline:none; color: var(--text); font-size:14px; }
+  #urlInput::placeholder{ color: var(--text-dim); }
+  .go-btn{ background: var(--accent-dim); color:#fff; border:none; border-radius:16px; padding:7px 16px; font-size:13px; cursor:pointer; flex-shrink:0; }
+  .go-btn:hover{ background: var(--accent); color:#0d1117; }
+
+  .progress{ height:3px; width:0%; background: var(--accent); transition: width .25s ease; }
+
+  .view{ flex:1; position:relative; background: var(--bg); overflow-y:auto; color: var(--text); }
+
+  /* Homepage */
+  .homepage{ min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px;
+    background: radial-gradient(circle at 50% 20%, #1c2330, #0d1117 70%); }
+  .homepage h1{ font-size:26px; margin-bottom:22px; letter-spacing:1px; color: var(--accent); }
+  .home-search{ width:min(520px, 92%); display:flex; align-items:center; gap:10px; background: var(--panel-2);
+    border:1px solid var(--border); border-radius:24px; padding:12px 20px; }
+  .home-search input{ flex:1; background:transparent; border:none; outline:none; color: var(--text); font-size:15px; }
+  .hint{ margin-top:14px; font-size:12px; color: var(--text-dim); text-align:center; max-width:420px; }
+
+  /* Search results */
+  .results{ max-width:680px; margin:0 auto; padding:22px 20px; }
+  .results h2{ font-size:14px; color: var(--text-dim); font-weight:500; margin-bottom:16px; }
+  .result-card{ background: var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; cursor:pointer; }
+  .result-card:hover{ border-color: var(--accent-dim); }
+  .result-card .rtitle{ color: var(--accent); font-size:15.5px; margin-bottom:6px; }
+  .result-card .rsnippet{ color: var(--text-dim); font-size:13px; line-height:1.5; }
+  .result-card .rsnippet mark{ background: none; color: var(--text); font-weight:600; }
+  .empty-state{ text-align:center; color: var(--text-dim); padding:60px 20px; font-size:14px; }
+
+  /* Article view */
+  .article{ max-width:720px; margin:0 auto; padding:26px 24px 60px 24px; }
+  .article .back-link{ color: var(--accent); font-size:13px; cursor:pointer; margin-bottom:16px; display:inline-block; }
+  .article h1{ font-size:24px; margin:0 0 4px 0; color: var(--text); }
+  .article .source{ font-size:11.5px; color: var(--text-dim); margin-bottom:18px; }
+  .article .thumb{ max-width:100%; border-radius:10px; margin-bottom:18px; display:block; }
+  .article .extract{ font-size:15px; line-height:1.7; color: #d6dee7; white-space:pre-wrap; }
+  .article a.full-link{ display:inline-block; margin-top:22px; color: var(--accent); font-size:13px; text-decoration:none; border-bottom:1px dotted var(--accent-dim); }
+
+  .loading-spin{ display:flex; align-items:center; justify-content:center; gap:10px; padding:60px 20px; color: var(--text-dim); font-size:13px; }
+  .spinner{ width:16px; height:16px; border:2px solid var(--border); border-top-color: var(--accent); border-radius:50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  /* Embed (YouTube / direct URL iframe) */
+  .embed-wrap{ position:absolute; inset:0; background:#000; }
+  .embed-wrap iframe{ width:100%; height:100%; border:none; display:block; }
+  .yt-wrap{ max-width:900px; margin:0 auto; padding:20px; }
+  .yt-wrap iframe{ width:100%; aspect-ratio:16/9; border:none; border-radius:10px; display:block; }
+  .fallback-card{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:30px; background: var(--panel); }
+  .fallback-card.show{ display:flex; }
+  .fallback-card .icon{ font-size:38px; margin-bottom:14px; color: var(--danger); }
+  .fallback-card h2{ margin:0 0 8px 0; font-size:17px; }
+  .fallback-card p{ color: var(--text-dim); font-size:13.5px; max-width:420px; line-height:1.5; margin-bottom:18px; }
+  .fallback-card a.openbtn{ background: var(--accent); color:#0d1117; text-decoration:none; font-weight:600;
+    padding:10px 22px; border-radius:20px; font-size:13.5px; }
+
+  .statusbar{ padding:4px 12px; font-size:11px; color: var(--text-dim); background: var(--bg); border-top:1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<div class="browser">
+  <div class="tabbar" id="tabbar"></div>
+
+  <div class="toolbar">
+    <div class="nav-btn" id="backBtn" title="Back">&#8592;</div>
+    <div class="nav-btn" id="fwdBtn" title="Forward">&#8594;</div>
+    <div class="nav-btn" id="reloadBtn" title="Reload">&#8635;</div>
+    <div class="nav-btn" id="homeBtn" title="Home">&#8962;</div>
+    <div class="addressbar">
+      <span class="lock">&#128269;</span>
+      <input id="urlInput" type="text" placeholder="Search, paste a YouTube link, or a URL..." autocomplete="off" spellcheck="false">
+    </div>
+    <button class="go-btn" id="goBtn">Search</button>
+  </div>
+
+  <div class="progress" id="progress"></div>
+  <div class="view" id="view"></div>
+  <div class="statusbar" id="statusbar">Ready</div>
+</div>
+
+<script>
+(function(){
+
+  // ---------- State ----------
+  let tabs = [];
+  let activeTabId = null;
+  let tabCounter = 0;
+
+  // page types: {type:'home'} | {type:'results', query, data} | {type:'article', title, data}
+  function createTab(){
+    tabCounter++;
+    const tab = { id:'tab'+tabCounter, title:'New Tab', history:[{type:'home'}], histIndex:0 };
+    tabs.push(tab);
+    return tab;
+  }
+  function activeTab(){ return tabs.find(t => t.id === activeTabId); }
+  function currentPage(tab){ return tab.history[tab.histIndex]; }
+
+  function pushPage(page){
+    const tab = activeTab();
+    tab.history = tab.history.slice(0, tab.histIndex + 1);
+    tab.history.push(page);
+    tab.histIndex = tab.history.length - 1;
+  }
+
+  // ---------- DOM refs ----------
+  const tabbarEl = document.getElementById('tabbar');
+  const viewEl = document.getElementById('view');
+  const urlInput = document.getElementById('urlInput');
+  const goBtn = document.getElementById('goBtn');
+  const backBtn = document.getElementById('backBtn');
+  const fwdBtn = document.getElementById('fwdBtn');
+  const reloadBtn = document.getElementById('reloadBtn');
+  const homeBtn = document.getElementById('homeBtn');
+  const progressEl = document.getElementById('progress');
+  const statusbarEl = document.getElementById('statusbar');
+
+  function setProgress(pct){
+    progressEl.style.width = pct + '%';
+    if(pct >= 100) setTimeout(() => { progressEl.style.width = '0%'; }, 400);
+  }
+
+  // ---------- API calls (CORS-enabled Wikipedia endpoints) ----------
+  async function searchWikipedia(query){
+    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=12`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('search failed');
+    const data = await res.json();
+    return data.query.search; // [{title, snippet, ...}]
+  }
+
+  async function fetchArticle(title){
+    const sumUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    const res = await fetch(sumUrl);
+    if(!res.ok) throw new Error('article fetch failed');
+    return res.json();
+  }
+
+  // ---------- Navigation ----------
+  function looksLikeUrl(str){
+    str = str.trim();
+    return /^https?:\/\//i.test(str) || (/^[a-z0-9.\-]+\.[a-z]{2,}(\/.*)?$/i.test(str) && !str.includes(' '));
+  }
+
+  function normalizeUrl(str){
+    str = str.trim();
+    if(/^https?:\/\//i.test(str)) return str;
+    return 'https://' + str;
+  }
+
+  function extractYouTubeId(input){
+    input = input.trim();
+    // bare 11-char video id
+    if(/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+    try{
+      const u = new URL(looksLikeUrl(input) ? normalizeUrl(input) : 'https://x.invalid');
+      if(u.hostname.includes('youtu.be')){
+        const id = u.pathname.replace('/', '');
+        if(id) return id;
+      }
+      if(u.hostname.includes('youtube.com')){
+        if(u.pathname === '/watch' && u.searchParams.get('v')) return u.searchParams.get('v');
+        if(u.pathname.startsWith('/shorts/')) return u.pathname.split('/')[2];
+        if(u.pathname.startsWith('/embed/')) return u.pathname.split('/')[2];
+      }
+    }catch(e){ /* not a url */ }
+    // "youtube <video id or search-ish text>" prefix
+    const m = input.match(/^youtube\s+(.+)$/i);
+    if(m && /^[a-zA-Z0-9_-]{11}$/.test(m[1].trim())) return m[1].trim();
+    return null;
+  }
+
+  const IFRAME_BLOCKED_HINTS = ['google.com','youtube.com','facebook.com','instagram.com','twitter.com','x.com','amazon.com','reddit.com','netflix.com','tiktok.com'];
+  function isKnownBlocked(url){
+    const lower = url.toLowerCase();
+    return IFRAME_BLOCKED_HINTS.some(h => lower.includes(h));
+  }
+
+  async function doSearch(query){
+    if(!query || !query.trim()) return;
+    const tab = activeTab();
+    tab.title = '"' + query.slice(0,22) + '"';
+    pushPage({ type:'results', query, data:null });
+    renderTabs();
+    renderView();
+
+    statusbarEl.textContent = 'Searching for "' + query + '" ...';
+    setProgress(35);
+    try{
+      const results = await searchWikipedia(query);
+      const page = currentPage(activeTab());
+      if(page.query === query){ page.data = results; renderView(); }
+      setProgress(100);
+      statusbarEl.textContent = results.length + ' results for "' + query + '"';
+    }catch(e){
+      const page = currentPage(activeTab());
+      if(page.query === query){ page.data = 'error'; renderView(); }
+      setProgress(100);
+      statusbarEl.textContent = 'Search failed — network/CORS issue';
+    }
+  }
+
+  async function openArticle(title){
+    const tab = activeTab();
+    tab.title = title.slice(0,26);
+    pushPage({ type:'article', title, data:null });
+    renderTabs();
+    renderView();
+
+    statusbarEl.textContent = 'Loading "' + title + '" ...';
+    setProgress(35);
+    try{
+      const data = await fetchArticle(title);
+      const page = currentPage(activeTab());
+      if(page.title === title){ page.data = data; renderView(); }
+      setProgress(100);
+      statusbarEl.textContent = 'en.wikipedia.org/wiki/' + encodeURIComponent(title.replace(/ /g,'_'));
+    }catch(e){
+      const page = currentPage(activeTab());
+      if(page.title === title){ page.data = 'error'; renderView(); }
+      setProgress(100);
+      statusbarEl.textContent = 'Failed to load article';
+    }
+  }
+
+  function navigateFromInput(input){
+    input = input.trim();
+    if(!input) return;
+
+    const ytId = extractYouTubeId(input);
+    if(ytId){ openYouTube(ytId); return; }
+
+    if(looksLikeUrl(input)){ openDirectUrl(normalizeUrl(input)); return; }
+
+    doSearch(input);
+  }
+
+  function openYouTube(videoId){
+    const tab = activeTab();
+    tab.title = 'YouTube video';
+    pushPage({ type:'youtube', videoId });
+    renderTabs();
+    renderView();
+    statusbarEl.textContent = 'youtube.com/embed/' + videoId;
+    setProgress(100);
+  }
+
+  function openDirectUrl(url){
+    const tab = activeTab();
+    let host = '';
+    try{ host = new URL(url).hostname; }catch(e){}
+    tab.title = host || url.slice(0,26);
+    pushPage({ type:'embed', url });
+    renderTabs();
+    renderView();
+    statusbarEl.textContent = 'Loading ' + url + ' ...';
+    setProgress(35);
+  }
+
+  function goHome(){
+    pushPage({ type:'home' });
+    const tab = activeTab();
+    tab.title = 'New Tab';
+    renderTabs();
+    renderView();
+  }
+  function goBack(){
+    const tab = activeTab();
+    if(!tab || tab.histIndex <= 0) return;
+    tab.histIndex--;
+    renderView();
+  }
+  function goForward(){
+    const tab = activeTab();
+    if(!tab || tab.histIndex >= tab.history.length - 1) return;
+    tab.histIndex++;
+    renderView();
+  }
+  function reload(){
+    const page = currentPage(activeTab());
+    if(page.type === 'results') doSearch(page.query);
+    else if(page.type === 'article') openArticle(page.title);
+    else renderView();
+  }
+  // (youtube/embed pages just re-render fresh from state, handled by renderView above)
+
+  function updateToolbarState(){
+    const tab = activeTab();
+    backBtn.classList.toggle('disabled', !tab || tab.histIndex <= 0);
+    fwdBtn.classList.toggle('disabled', !tab || tab.histIndex >= tab.history.length - 1);
+  }
+
+  // ---------- Rendering ----------
+  function renderView(){
+    const tab = activeTab();
+    if(!tab){ return; }
+    const page = currentPage(tab);
+    viewEl.innerHTML = '';
+    urlInput.value = page.type === 'results' ? page.query
+      : page.type === 'article' ? page.title
+      : page.type === 'youtube' ? 'https://youtube.com/watch?v=' + page.videoId
+      : page.type === 'embed' ? page.url
+      : '';
+
+    if(page.type === 'home') renderHome();
+    else if(page.type === 'results') renderResults(page);
+    else if(page.type === 'article') renderArticle(page);
+    else if(page.type === 'youtube') renderYouTube(page);
+    else if(page.type === 'embed') renderEmbed(page);
+
+    updateToolbarState();
+  }
+
+  function renderYouTube(page){
+    const wrap = document.createElement('div');
+    wrap.className = 'yt-wrap';
+    wrap.innerHTML = `<iframe src="https://www.youtube.com/embed/${encodeURIComponent(page.videoId)}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+    viewEl.appendChild(wrap);
+    setProgress(100);
+    statusbarEl.textContent = 'Playing YouTube video';
+  }
+
+  function renderEmbed(page){
+    const wrap = document.createElement('div');
+    wrap.className = 'embed-wrap';
+    const isLikelyBlocked = isKnownBlocked(page.url);
+
+    if(isLikelyBlocked){
+      // Don't even attempt the iframe — known-blocked sites will only render their own
+      // "refused to connect" error page as frame content, which looks like a bug but isn't one.
+      wrap.innerHTML = `
+        <div class="fallback-card show">
+          <div class="icon">&#9888;</div>
+          <h2>This site can't be displayed here</h2>
+          <p>It blocks embedding in other pages — enforced by the site itself, not something a page can override.</p>
+          <a class="openbtn" href="${page.url}" target="_blank" rel="noopener noreferrer">Open in new tab &#8599;</a>
+        </div>
+      `;
+      viewEl.appendChild(wrap);
+      setProgress(100);
+      statusbarEl.textContent = 'Blocked: ' + page.url;
+      return;
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.src = page.url;
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+    iframe.referrerPolicy = 'no-referrer';
+
+    const fallback = document.createElement('div');
+    fallback.className = 'fallback-card';
+    fallback.innerHTML = `
+      <div class="icon">&#9888;</div>
+      <h2>This site can't be displayed here</h2>
+      <p>It's blocking embedding in other pages — enforced by the site itself, not something a page can override.</p>
+      <a class="openbtn" href="${page.url}" target="_blank" rel="noopener noreferrer">Open in new tab &#8599;</a>
+    `;
+
+    wrap.appendChild(iframe);
+    wrap.appendChild(fallback);
+    viewEl.appendChild(wrap);
+
+    // Load event is unreliable here: some browsers fire it even for the site's own
+    // error page rendered as frame content. Use a probe on top of it instead.
+    let resolved = false;
+    iframe.addEventListener('load', () => {
+      setTimeout(() => {
+        if(resolved) return;
+        let blank = false;
+        try{
+          const loc = iframe.contentWindow && iframe.contentWindow.location;
+          blank = !loc || loc.href === 'about:blank';
+        }catch(e){
+          // Threw = genuinely cross-origin content loaded = real success, leave it be.
+          blank = false;
+        }
+        resolved = true;
+        setProgress(100);
+        if(blank){
+          fallback.classList.add('show');
+          statusbarEl.textContent = 'Blocked: ' + page.url;
+        } else {
+          statusbarEl.textContent = page.url;
+        }
+      }, 150);
+    });
+    setTimeout(() => {
+      if(resolved) return;
+      resolved = true;
+      setProgress(100);
+      fallback.classList.add('show');
+      statusbarEl.textContent = 'Blocked: ' + page.url;
+    }, 4000);
+  }
+
+  function renderHome(){
+    const home = document.createElement('div');
+    home.className = 'homepage';
+    home.innerHTML = `
+      <h1>&#127760; Search</h1>
+      <div class="home-search">
+        <span>&#128269;</span>
+        <input id="homeInput" type="text" placeholder="Search anything..." autocomplete="off" spellcheck="false">
+      </div>
+      <div class="hint">Search loads real results in-app. Paste a YouTube link to watch it here, or any URL to try loading it directly.</div>
+    `;
+    viewEl.appendChild(home);
+    const homeInput = home.querySelector('#homeInput');
+    homeInput.focus();
+    homeInput.addEventListener('keydown', e => { if(e.key === 'Enter') doSearch(homeInput.value); });
+  }
+
+  function renderResults(page){
+    const wrap = document.createElement('div');
+    wrap.className = 'results';
+    if(page.data === null){
+      wrap.innerHTML = `<div class="loading-spin"><div class="spinner"></div>Searching for "${escapeHtml(page.query)}"...</div>`;
+      viewEl.appendChild(wrap);
+      return;
+    }
+    if(page.data === 'error'){
+      wrap.innerHTML = `<div class="empty-state">Couldn't reach the search API right now. Check your connection and try again.</div>`;
+      viewEl.appendChild(wrap);
+      return;
+    }
+    if(page.data.length === 0){
+      wrap.innerHTML = `<h2>No results for "${escapeHtml(page.query)}"</h2>`;
+      viewEl.appendChild(wrap);
+      return;
+    }
+    let html = `<h2>Results for "${escapeHtml(page.query)}"</h2>`;
+    page.data.forEach(r => {
+      html += `
+        <div class="result-card" data-title="${escapeAttr(r.title)}">
+          <div class="rtitle">${escapeHtml(r.title)}</div>
+          <div class="rsnippet">${sanitizeSnippet(r.snippet)}</div>
+        </div>
+      `;
+    });
+    wrap.innerHTML = html;
+    viewEl.appendChild(wrap);
+    wrap.querySelectorAll('.result-card').forEach(card => {
+      card.addEventListener('click', () => openArticle(card.dataset.title));
+    });
+  }
+
+  function renderArticle(page){
+    const wrap = document.createElement('div');
+    wrap.className = 'article';
+    if(page.data === null){
+      wrap.innerHTML = `<div class="loading-spin"><div class="spinner"></div>Loading "${escapeHtml(page.title)}"...</div>`;
+      viewEl.appendChild(wrap);
+      return;
+    }
+    if(page.data === 'error'){
+      wrap.innerHTML = `
+        <span class="back-link" id="backLink">&#8592; Back to results</span>
+        <div class="empty-state">Couldn't load this article. It may not exist, or the request failed.</div>
+      `;
+      viewEl.appendChild(wrap);
+      wrap.querySelector('#backLink').addEventListener('click', goBack);
+      return;
+    }
+    const d = page.data;
+    const thumb = d.thumbnail ? `<img class="thumb" src="${d.thumbnail.source}" alt="">` : '';
+    wrap.innerHTML = `
+      <span class="back-link" id="backLink">&#8592; Back to results</span>
+      <h1>${escapeHtml(d.title || page.title)}</h1>
+      <div class="source">en.wikipedia.org &middot; live article summary</div>
+      ${thumb}
+      <div class="extract">${escapeHtml(d.extract || 'No summary available.')}</div>
+      <a class="full-link" href="${d.content_urls ? d.content_urls.desktop.page : '#'}" target="_blank" rel="noopener noreferrer">Read full article on Wikipedia &#8599;</a>
+    `;
+    viewEl.appendChild(wrap);
+    wrap.querySelector('#backLink').addEventListener('click', goBack);
+  }
+
+  function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str == null ? '' : String(str); return d.innerHTML; }
+  function escapeAttr(str){ return escapeHtml(str).replace(/"/g, '&quot;'); }
+  function sanitizeSnippet(html){
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    tmp.querySelectorAll('*').forEach(el => {
+      if(el.tagName.toLowerCase() === 'span' && el.className.includes('searchmatch')){
+        const mark = document.createElement('mark');
+        mark.textContent = el.textContent;
+        el.replaceWith(mark);
+      } else {
+        el.replaceWith(document.createTextNode(el.textContent));
+      }
+    });
+    return tmp.innerHTML;
+  }
+
+  // ---------- Tabs UI ----------
+  function renderTabs(){
+    tabbarEl.innerHTML = '';
+    tabs.forEach(tab => {
+      const el = document.createElement('div');
+      el.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
+      el.innerHTML = `<div class="fav"></div><div class="title">${escapeHtml(tab.title)}</div><div class="close">&#10005;</div>`;
+      el.addEventListener('click', e => {
+        if(e.target.closest('.close')) return;
+        activeTabId = tab.id; renderTabs(); renderView();
+      });
+      el.querySelector('.close').addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
+      tabbarEl.appendChild(el);
+    });
+    const newBtn = document.createElement('div');
+    newBtn.className = 'newtab-btn';
+    newBtn.textContent = '+';
+    newBtn.addEventListener('click', () => {
+      const t = createTab(); activeTabId = t.id; renderTabs(); renderView();
+    });
+    tabbarEl.appendChild(newBtn);
+  }
+
+  function closeTab(id){
+    const idx = tabs.findIndex(t => t.id === id);
+    if(idx === -1) return;
+    tabs.splice(idx, 1);
+    if(tabs.length === 0){ const t = createTab(); activeTabId = t.id; }
+    else if(activeTabId === id){ activeTabId = tabs[Math.max(0, idx-1)].id; }
+    renderTabs(); renderView();
+  }
+
+  // ---------- Events ----------
+  goBtn.addEventListener('click', () => navigateFromInput(urlInput.value));
+  urlInput.addEventListener('keydown', e => { if(e.key === 'Enter') navigateFromInput(urlInput.value); });
+  backBtn.addEventListener('click', goBack);
+  fwdBtn.addEventListener('click', goForward);
+  reloadBtn.addEventListener('click', reload);
+  homeBtn.addEventListener('click', goHome);
+
+  // ---------- Init ----------
+  const first = createTab();
+  activeTabId = first.id;
+  renderTabs();
+  renderView();
+
+})();
+</script>
+
+</body>
+</html>
